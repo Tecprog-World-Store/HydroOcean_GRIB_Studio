@@ -1,0 +1,31 @@
+application:
+  title: "HydroOcean GRIB Studio"
+  version: "0.1.0"
+
+paths:
+  downloads: "data/downloads"
+  input: "data/input"
+  output: "data/output"
+
+peru_bbox:
+  north: 1.0
+  south: -20.0
+  west: -90.0
+  east: -68.0
+
+nomads:
+  gfswave_filter: "https://nomads.ncep.noaa.gov/cgi-bin/filter_gfswave.pl"
+  request_pause_seconds: 10
+
+aliases:
+  wind_u: ["u", "u10", "ugrd", "UGRD"]
+  wind_v: ["v", "v10", "vgrd", "VGRD"]
+  wind_speed: ["wind", "WIND", "si10"]
+  wind_direction: ["wdir", "WDIR"]
+  wave_height: ["swh", "htsgw", "HTSGW"]
+  wave_period: ["perpw", "PERPW", "mwp"]
+  wave_direction: ["dirpw", "DIRPW", "mwd"]
+  current_u: ["uo", "uogr", "uogrd", "UOGRD", "eastcur", "EASTCUR"]
+  current_v: ["vo", "vogr", "vogrd", "VOGRD", "nrthcur", "NRTHCUR"]
+  current_speed: ["spc", "SPC"]
+  current_direction: ["dirc", "DIRC"]

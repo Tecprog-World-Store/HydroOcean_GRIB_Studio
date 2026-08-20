@@ -1,0 +1,16 @@
+name: hydroocean-grib
+channels:
+  - conda-forge
+dependencies:
+  - python=3.11
+  - tk
+  - numpy
+  - pandas
+  - xarray
+  - cfgrib
+  - eccodes
+  - matplotlib
+  - pyyaml
+  - requests
+  - scipy
+  - pytest
