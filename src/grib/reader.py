@@ -2,149 +2,158 @@ from __future__ import annotations
 from pathlib import Path
 import numpy as np
 import pandas as pd
-import xarray as xr
 import cfgrib
 
 LAT_NAMES = ("latitude", "lat", "y")
 LON_NAMES = ("longitude", "lon", "x")
 
-class GribReader:
-    def __init__(self):
-        self.path = None
+ALIASES = {
+    "wind_u": ["u", "ugrd", "u10"],
+    "wind_v": ["v", "vgrd", "v10"],
+    "wind_speed": ["ws", "wind", "si10"],
+    "wind_direction": ["wdir"],
+    "wave_height": ["swh", "htsgw"],
+    "wave_period": ["perpw", "mwp"],
+    "wave_direction": ["dirpw", "mwd"],
+    "current_u": ["uo", "uogrd", "eastcur"],
+    "current_v": ["vo", "vogrd", "nrthcur"],
+    "current_speed": ["spc"],
+    "current_direction": ["dirc"],
+}
+
+class GribFile:
+    def __init__(self, path):
+        self.path = Path(path)
         self.datasets = []
 
-    def open(self, path):
-        self.path = Path(path)
+    def open(self):
         self.datasets = cfgrib.open_datasets(
             str(self.path),
             backend_kwargs={"indexpath": ""}
         )
-        return self.datasets
+        return self
 
     def inventory(self):
         rows = []
         for i, ds in enumerate(self.datasets):
-            for name, da in ds.data_vars.items():
+            for var, da in ds.data_vars.items():
                 rows.append({
+                    "file": self.path.name,
                     "dataset": i,
-                    "variable": name,
+                    "variable": var,
                     "shortName": da.attrs.get("GRIB_shortName", ""),
                     "long_name": da.attrs.get("long_name", da.attrs.get("GRIB_name", "")),
                     "units": da.attrs.get("units", ""),
                     "dims": ", ".join(da.dims),
-                    "shape": str(tuple(da.shape))
+                    "shape": str(tuple(da.shape)),
                 })
         return pd.DataFrame(rows)
 
-    def _coord_name(self, ds, candidates):
-        for n in candidates:
-            if n in ds.coords:
-                return n
-        for n in candidates:
-            if n in ds.dims:
-                return n
-        return None
-
     @staticmethod
-    def _normalize_query_names(names):
-        return {str(n).lower() for n in names}
+    def _norm(x):
+        return str(x or "").strip().lower()
 
-    def find_variable(self, names):
-        targets = self._normalize_query_names(names)
-        for ds_i, ds in enumerate(self.datasets):
+    def find(self, aliases):
+        targets = {self._norm(x) for x in aliases}
+        for di, ds in enumerate(self.datasets):
             for var, da in ds.data_vars.items():
-                options = {
-                    var.lower(),
-                    str(da.attrs.get("GRIB_shortName", "")).lower(),
-                    str(da.attrs.get("GRIB_name", "")).lower(),
-                    str(da.attrs.get("standard_name", "")).lower(),
+                names = {
+                    self._norm(var),
+                    self._norm(da.attrs.get("GRIB_shortName")),
+                    self._norm(da.attrs.get("GRIB_name")),
+                    self._norm(da.attrs.get("standard_name")),
                 }
-                if targets.intersection(options):
-                    return ds_i, var
+                if names & targets:
+                    return di, var
         return None
 
-    def extract_point(self, ds_i, var_name, lat, lon):
-        ds = self.datasets[ds_i]
-        da = ds[var_name]
+    def _coord(self, ds, candidates):
+        for name in candidates:
+            if name in ds.coords or name in ds.dims:
+                return name
+        return None
 
-        lat_name = self._coord_name(ds, LAT_NAMES)
-        lon_name = self._coord_name(ds, LON_NAMES)
+    def extract_dataarray(self, dataset_index, variable, lat, lon):
+        ds = self.datasets[dataset_index]
+        da = ds[variable]
+        lat_name = self._coord(ds, LAT_NAMES)
+        lon_name = self._coord(ds, LON_NAMES)
+        if not lat_name or not lon_name:
+            raise ValueError(f"Sin coordenadas lat/lon en {self.path.name}")
 
-        if lat_name is None or lon_name is None:
-            raise ValueError(
-                f"No se identificaron coordenadas lat/lon en dataset {ds_i}. "
-                f"Coords: {list(ds.coords)}"
-            )
-
-        lon_coord = ds[lon_name]
-        requested_lon = float(lon)
-
+        query_lon = float(lon)
+        lons = np.asarray(ds[lon_name].values)
         try:
-            lon_min = float(lon_coord.min())
-            lon_max = float(lon_coord.max())
-            if lon_min >= 0 and requested_lon < 0:
-                requested_lon = requested_lon % 360
+            if np.nanmin(lons) >= 0 and query_lon < 0:
+                query_lon %= 360.0
         except Exception:
             pass
 
-        # Caso común: lat/lon 1D.
         if ds[lat_name].ndim == 1 and ds[lon_name].ndim == 1:
             point = da.sel(
-                {lat_name: float(lat), lon_name: requested_lon},
+                {lat_name: float(lat), lon_name: query_lon},
                 method="nearest"
             )
-            actual_lat = float(point[lat_name].values)
-            actual_lon = float(point[lon_name].values)
+            used_lat = float(point[lat_name].values)
+            used_lon = float(point[lon_name].values)
         else:
-            # Grilla curvilínea: localización por distancia euclidiana aproximada.
             latv = np.asarray(ds[lat_name].values)
             lonv = np.asarray(ds[lon_name].values)
-            dlon = ((lonv - requested_lon + 180) % 360) - 180
-            dist2 = (latv - float(lat))**2 + dlon**2
-            idx = np.unravel_index(np.nanargmin(dist2), dist2.shape)
-            spatial_dims = ds[lat_name].dims
-            indexers = {d: idx[j] for j, d in enumerate(spatial_dims)}
+            dlon = ((lonv - query_lon + 180.0) % 360.0) - 180.0
+            d2 = (latv - float(lat))**2 + dlon**2
+            idx = np.unravel_index(np.nanargmin(d2), d2.shape)
+            indexers = {d: idx[j] for j, d in enumerate(ds[lat_name].dims)}
             point = da.isel(indexers)
-            actual_lat = float(ds[lat_name].isel(indexers).values)
-            actual_lon = float(ds[lon_name].isel(indexers).values)
+            used_lat = float(ds[lat_name].isel(indexers).values)
+            used_lon = float(ds[lon_name].isel(indexers).values)
+        return point.squeeze(drop=True), used_lat, used_lon
 
-        return point.squeeze(drop=True), actual_lat, actual_lon
+    @staticmethod
+    def _valid_time(point):
+        # Captura también coordenadas escalares; esto corrige el problema f000.
+        for name in ("valid_time", "time"):
+            if name in point.coords:
+                val = np.asarray(point.coords[name].values)
+                if val.size == 1:
+                    try:
+                        return pd.Timestamp(val.reshape(-1)[0])
+                    except Exception:
+                        pass
+        return None
 
-    def extract_series(self, aliases, lat, lon):
-        found = self.find_variable(aliases)
+    def extract_scalar(self, alias_key, lat, lon):
+        found = self.find(ALIASES[alias_key])
         if not found:
             return None
-        ds_i, var = found
-        da, actual_lat, actual_lon = self.extract_point(ds_i, var, lat, lon)
+        di, var = found
+        point, used_lat, used_lon = self.extract_dataarray(di, var, lat, lon)
+        values = np.asarray(point.values).reshape(-1)
 
-        # Convertir DataArray a Series intentando preservar eje temporal.
-        time_coord = None
-        for candidate in ("valid_time", "time", "step"):
-            if candidate in da.coords and da[candidate].ndim > 0:
-                time_coord = candidate
-                break
-
-        values = np.asarray(da.values).reshape(-1)
-
-        if "valid_time" in da.coords:
-            t = np.asarray(da["valid_time"].values).reshape(-1)
-            if len(t) == len(values):
-                index = pd.to_datetime(t)
+        if values.size != 1:
+            # Si el propio archivo ya tiene tiempo, devolver registros.
+            recs = []
+            if "valid_time" in point.coords:
+                times = np.asarray(point.coords["valid_time"].values).reshape(-1)
+            elif "time" in point.coords and np.asarray(point.coords["time"].values).size == values.size:
+                times = np.asarray(point.coords["time"].values).reshape(-1)
             else:
-                index = pd.RangeIndex(len(values), name="sample")
-        elif "time" in da.coords and da["time"].size == len(values):
-            index = pd.to_datetime(np.asarray(da["time"].values).reshape(-1))
-        elif "step" in da.coords and da["step"].size == len(values):
-            index = pd.Index(np.asarray(da["step"].values).reshape(-1), name="step")
-        else:
-            index = pd.RangeIndex(len(values), name="sample")
+                times = [None] * values.size
+            for t, value in zip(times, values):
+                recs.append({
+                    "time": pd.Timestamp(t) if t is not None else None,
+                    "value": float(value),
+                    "variable": var,
+                    "units": point.attrs.get("units", ""),
+                    "lat": used_lat,
+                    "lon": used_lon,
+                })
+            return recs
 
-        return {
-            "series": pd.Series(values, index=index, name=var),
+        return [{
+            "time": self._valid_time(point),
+            "value": float(values[0]),
             "variable": var,
-            "dataset": ds_i,
-            "units": da.attrs.get("units", ""),
-            "actual_lat": actual_lat,
-            "actual_lon": actual_lon,
-            "attrs": dict(da.attrs),
-        }
+            "units": point.attrs.get("units", ""),
+            "lat": used_lat,
+            "lon": used_lon,
+        }]

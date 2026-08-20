@@ -3,14 +3,16 @@ channels:
   - conda-forge
 dependencies:
   - python=3.11
-  - tk
+  - pyside6
   - numpy
   - pandas
   - xarray
   - cfgrib
   - eccodes
   - matplotlib
-  - pyyaml
   - requests
+  - pyyaml
   - scipy
+  - pillow
+  - pyinstaller
   - pytest

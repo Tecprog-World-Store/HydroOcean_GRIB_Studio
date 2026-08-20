@@ -1,196 +1,172 @@
-# HydroOcean GRIB Studio
+# HydroOcean GRIB Studio v0.2.0
+## Tecprog World E.I.R.L.
 
-Aplicación de escritorio en Python/Tkinter para análisis hidro-oceanográfico a partir de archivos GRIB2 y fuentes NOAA/NCEP.
+Aplicación de escritorio profesional para Windows orientada a la adquisición,
+lectura y análisis de datos GRIB2 de NOAA/NCEP WAVEWATCH III / GFS-Wave.
 
-## Objetivo
+### Cambio principal respecto de v0.1
 
-El proyecto permite:
+Un archivo `f000.grib2` contiene normalmente **un solo instante**. Por ello no
+puede producir por sí solo una serie temporal. Esta versión incorpora:
 
-- Abrir archivos `.grib2`, `.grb2`, `.grib` y `.grb`.
-- Inspeccionar variables disponibles.
-- Extraer la serie temporal del punto de malla más cercano a una coordenada.
-- Procesar viento:
-  - U/V.
-  - velocidad.
-  - dirección meteorológica "desde".
-  - rosa de vientos.
-  - serie temporal.
-- Procesar oleaje:
-  - altura significativa (`HTSGW`).
-  - periodo primario (`PERPW`).
-  - dirección primaria (`DIRPW`).
-  - rosa direccional de oleaje.
-  - series temporales.
-- Procesar corrientes cuando el GRIB2 contiene:
-  - `UOGRD/VOGRD`,
-  - `EASTCUR/NRTHCUR`,
-  - u otros nombres equivalentes configurables.
-- Calcular velocidad y dirección oceanográfica de la corriente.
-- Descargar subconjuntos de GFS-Wave mediante NOAA/NCEP NOMADS Grib Filter.
-- Exportar datos extraídos a CSV.
-- Exportar figuras PNG.
+1. Apertura de un GRIB2 individual.
+2. Apertura/procesamiento de una **carpeta completa de GRIB2**.
+3. Descarga de una **corrida completa de pronóstico** (`f000...f384`) para
+   construir una serie temporal.
+4. Descarga operacional por **rango de fechas/ciclos** dentro de la retención
+   disponible de NOMADS.
+5. Agregación de múltiples archivos en una sola tabla temporal.
+6. Exportación CSV.
+7. Rosas de viento, oleaje y corriente.
+8. GUI responsive con **PySide6/Qt**.
+9. Menú Archivo / Adquisición / Análisis / Ayuda.
+10. Branding Tecprog World E.I.R.L.
+11. Base preparada para PyInstaller.
+12. Script Inno Setup para crear instalador.
 
-## Decisión de arquitectura
+---
 
-Se utiliza un enfoque híbrido:
+## Importante sobre datos por años
 
-1. **Lectura local GRIB2** como núcleo estable y reproducible.
-2. **Descarga automatizada por NOMADS Grib Filter** para adquirir GFS-Wave.
-3. Conector independiente preparado para fuentes de corrientes como RTOFS.
-4. No se depende de scraping frágil de HTML.
+### GFS-Wave operacional / NOMADS
+NOAA mantiene únicamente una ventana corta de datos recientes. No debe usarse
+NOMADS como si fuera un archivo multianual.
 
-NOAA documenta que WAVEWATCH III/GFS-Wave se distribuye en GRIB y que NOMADS permite descargar subconjuntos regionales y por parámetros.
+### WAVEWATCH III históricos
+Para estudios históricos deben utilizarse los archivos de hindcast/reanalysis:
 
-Referencias oficiales:
-- https://polar.ncep.noaa.gov/waves/download.shtml
+- CFSR/CFSRR WAVEWATCH III: 1979–2009, homogéneo y apropiado para climatología.
+- Production Hindcast: 2005-02 a 2019-05, archivo mensual GRIB2, pero
+  estadísticamente inhomogéneo debido a cambios de los modelos operacionales.
+
+La pestaña **Histórico** incluye el planificador y accesos oficiales. Una futura
+versión puede incorporar descarga automática de los paquetes NCEI, pero debe
+evitarse prometer "descarga de cualquier año desde NOMADS", porque la fuente
+operacional no lo permite.
+
+Fuentes oficiales:
+- https://polar.ncep.noaa.gov/waves/download2.shtml
+- https://polar.ncep.noaa.gov/waves/CFSR_hindcast.shtml
+- https://www.ncei.noaa.gov/archive/accession/NCEP-WAVEWATCH
 - https://nomads.ncep.noaa.gov/
-- https://nomads.ncep.noaa.gov/info.php?page=gribfilter
-- https://www.nco.ncep.noaa.gov/pmb/products/wave/
-- https://www.nco.ncep.noaa.gov/pmb/products/rtofs/
-- https://codes.wmo.int/
 
-## Instalación recomendada: Anaconda Prompt
+---
 
-Ubícate en esta carpeta.
+## Crear environment
+
+Desde **Anaconda Prompt**:
 
 ```bat
-cd C:\RUTA\HydroOcean_GRIB_Studio
+cd C:\RUTA\HydroOcean_GRIB_Studio_v0.2.0
 conda env create -f environment.yml
 conda activate hydroocean-grib
 python main.py
 ```
 
-También puedes ejecutar:
+Si ya existe el environment:
 
 ```bat
-setup_env.bat
+conda env update -n hydroocean-grib -f environment.yml --prune
 ```
 
-y luego:
+---
 
-```bat
-run_gui.bat
-```
+## Identidad de la empresa
 
-## ¿Por qué Conda?
-
-La lectura GRIB2 con `cfgrib` utiliza la biblioteca ECMWF ecCodes. En Windows suele ser más simple y reproducible instalar `eccodes` y `cfgrib` desde `conda-forge` que gestionar bibliotecas binarias manualmente.
-
-## Flujo recomendado de uso
-
-### A. Archivo GRIB2 local
-
-1. Ejecuta `python main.py`.
-2. Pulsa **Abrir GRIB2**.
-3. Selecciona el archivo.
-4. Revisa la pestaña **Inventario**.
-5. Define latitud y longitud.
-6. Pulsa **Extraer punto**.
-7. Selecciona el producto:
-   - viento,
-   - oleaje,
-   - corrientes.
-8. Genera la rosa o serie temporal.
-9. Exporta CSV/PNG.
-
-### B. Descargar GFS-Wave
-
-1. Abre la pestaña **NOAA / GFS-Wave**.
-2. Indica:
-   - fecha `YYYYMMDD`,
-   - ciclo `00`, `06`, `12` o `18`,
-   - hora de pronóstico,
-   - límites geográficos.
-3. Selecciona parámetros.
-4. Descarga.
-5. El archivo queda en `data/downloads/`.
-6. Ábrelo desde la GUI.
-
-## Región Perú sugerida
-
-Como punto inicial para pruebas:
-
-- Norte: 1.0°
-- Sur: -20.0°
-- Oeste: -90.0°
-- Este: -68.0°
-
-Para estudios de ingeniería se recomienda descargar únicamente el dominio necesario para reducir volumen y tiempo de procesamiento.
-
-## Variables de referencia GFS-Wave
-
-- `WIND`: velocidad del viento.
-- `WDIR`: dirección meteorológica, desde donde sopla.
-- `UGRD`, `VGRD`: componentes del viento.
-- `HTSGW`: altura significativa combinada.
-- `PERPW`: periodo medio de la ola primaria.
-- `DIRPW`: dirección de ola primaria.
-- `WVHGT`: altura significativa de mar de viento.
-- `WVPER`: periodo medio de mar de viento.
-- `WVDIR`: dirección de mar de viento.
-- `SWELL`: altura de swell.
-- `SWPER`: periodo de swell.
-- `SWDIR`: dirección de swell.
-
-## Corrientes
-
-GFS-Wave no debe asumirse como fuente general de corrientes oceánicas. Para corrientes se recomienda usar productos oceanográficos, por ejemplo RTOFS/HYCOM. NCEP define en GRIB2:
-
-- `UOGRD`: componente U de corriente.
-- `VOGRD`: componente V de corriente.
-- `DIRC`: dirección de corriente.
-- `SPC`: velocidad de corriente.
-- `EASTCUR`: corriente hacia el Este.
-- `NRTHCUR`: corriente hacia el Norte.
-
-La versión inicial puede leer esas variables si están presentes en un GRIB2 local.
-
-## Convenciones direccionales
-
-- Viento: dirección meteorológica **desde donde viene**.
-- Corriente: dirección oceanográfica **hacia donde se desplaza**.
-- Oleaje: se conserva la dirección reportada por el producto y se etiqueta de forma explícita en las salidas.
-
-No intercambiar automáticamente estas convenciones en informes técnicos.
-
-## Estructura
+El programa carga el logo desde:
 
 ```text
-HydroOcean_GRIB_Studio/
-├─ main.py
-├─ environment.yml
-├─ setup_env.bat
-├─ run_gui.bat
-├─ config/
-│  └─ default.yaml
-├─ data/
-│  ├─ downloads/
-│  ├─ input/
-│  └─ output/
-├─ docs/
-│  ├─ arquitectura.md
-│  └─ variables_grib2.md
-├─ src/
-│  ├─ analysis/
-│  ├─ acquisition/
-│  ├─ grib/
-│  ├─ gui/
-│  ├─ plots/
-│  └─ utils/
-└─ tests/
+src/logo-tecprog-world.png
 ```
 
-## Alcance de esta versión
+Esta entrega contiene un marcador de identidad para que el programa siempre
+arranque. Reemplace ese archivo por el logo oficial de Tecprog World E.I.R.L.
+manteniendo exactamente el mismo nombre.
 
-Esta entrega es un MVP técnico funcional y extensible. Antes de usar resultados para un estudio contractual, debe verificarse:
+Datos mostrados en Ayuda > Acerca de:
 
-- fuente y versión del modelo,
-- resolución espacial y temporal,
-- zona horaria,
-- datum/coordenadas,
-- convención direccional,
-- periodo de análisis,
-- datos faltantes,
-- representatividad del punto virtual,
-- validación contra observaciones cuando existan.
+- Tecprog World E.I.R.L.
+- grupotecprog@gmail.com
+- WhatsApp: +51 952 354 282
+- Yape Perú: +51 952 354 282
+- Donaciones internacionales: coordinación por correo para PayPal.
 
+---
+
+## Crear EXE
+
+```bat
+conda activate hydroocean-grib
+build_exe.bat
+```
+
+Salida:
+
+```text
+dist\HydroOceanGRIBStudio\
+```
+
+La aplicación se genera en modo `onedir`, recomendado para Qt + ecCodes/cfgrib.
+
+---
+
+## Crear instalador Inno Setup
+
+Después de generar `dist`:
+
+1. Abra `installer\HydroOceanGRIBStudio.iss` con Inno Setup.
+2. Pulse **Compile**.
+3. El instalador aparecerá en:
+   `installer\Output\`
+
+Nota: la versión gratuita/no comercial de Inno Setup mostrada en la captura
+debe utilizarse respetando sus condiciones de licencia y el uso comercial
+correspondiente.
+
+---
+
+## Flujo para generar una serie temporal
+
+### Opción A — carpeta de archivos
+Descargue varios GRIB2 y use:
+
+**Archivo > Abrir carpeta GRIB2**
+
+Luego:
+- defina latitud/longitud,
+- seleccione Oleaje/Viento,
+- pulse `Construir serie`.
+
+### Opción B — corrida de pronóstico
+En **Adquisición > GFS-Wave operacional**:
+- fecha,
+- ciclo,
+- `f inicial = 0`,
+- `f final = 120`,
+- paso = 3,
+- región,
+- Descargar corrida.
+
+Se descargan varios archivos y pueden agregarse automáticamente.
+
+### Opción C — observaciones/estudio histórico
+Para años completos se debe trabajar con hindcast/reanalysis; no con f000 de
+NOMADS.
+
+---
+
+## Convenciones
+
+- Viento: dirección meteorológica **desde donde viene**.
+- Corriente: dirección oceanográfica **hacia donde va**.
+- Oleaje: se conserva la dirección reportada por el producto y se etiqueta.
+- Longitudes NOAA 0–360 se convierten automáticamente para coordenadas -180–180
+  cuando es necesario.
+
+---
+
+## Licencia del código
+
+MIT para el código de esta plantilla. Los datos NOAA conservan sus propios
+avisos y condiciones. Tecprog World E.I.R.L. no garantiza disponibilidad de
+servicios remotos de terceros.

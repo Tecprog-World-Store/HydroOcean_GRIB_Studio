@@ -5,10 +5,7 @@ __pycache__/
 *.grib2
 *.grb
 *.grb2
-data/downloads/*
-!data/downloads/.gitkeep
-data/input/*
-!data/input/.gitkeep
-data/output/*
-!data/output/.gitkeep
+build/
+dist/
+installer/Output/
 .env
